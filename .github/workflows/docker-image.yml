@@ -36,25 +36,30 @@ jobs:
           last_seen=$(cat .last_seen_update 2>/dev/null || echo none)
           echo "Previous: $last_seen"
           echo "Current: ${{ steps.get_info.outputs.last_updated }}"
-      
-          if [ "$last_seen" == "${{ steps.get_info.outputs.last_updated }}" ]; then
+
+          if [ "$last_seen" = "$current" ]; then
             echo "No new update — skipping build."
-            exit 0
+            echo "updated=false" >> $GITHUB_OUTPUT
+          else
+            echo "updated=true" >> $GITHUB_OUTPUT
           fi
 
       - name: Log in to Docker Hub
+        if: steps.check.outputs.updated == 'true'
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Generate timestamp tag
+        if: steps.check.outputs.updated == 'true'
         id: timestamp
         run: |
           tag=$(date -u +'%Y-%m-%d')
           echo "tag=$tag" >> $GITHUB_OUTPUT
 
       - name: Build and push GPU-patched image
+        if: steps.check.outputs.updated == 'true'
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -65,6 +70,7 @@ jobs:
             daltonsbaker/beszel-agent-nvidia:latest
             
       - name: Update Docker Hub README
+        if: steps.check.outputs.updated == 'true'
         uses: peter-evans/dockerhub-description@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
@@ -73,6 +79,7 @@ jobs:
           readme-filepath: ./README.md
 
       - name: Save update timestamp
+        if: steps.check.outputs.updated == 'true'
         run: |
           echo "${{ steps.get_info.outputs.last_updated }}" > .last_seen_update
           git config user.name github-actions
