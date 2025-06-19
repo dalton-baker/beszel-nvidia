@@ -5,6 +5,9 @@ on:
     - cron: '0 5 * * *'  # every 15 minutes
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   rebuild-if-updated:
     runs-on: ubuntu-latest
@@ -58,8 +61,8 @@ jobs:
           file: Dockerfile
           push: true
           tags: |
-            daltonsbaker/beszel-agent-nvidia:latest
             daltonsbaker/beszel-agent-nvidia:${{ steps.timestamp.outputs.tag }}
+            daltonsbaker/beszel-agent-nvidia:latest
 
       - name: Save update timestamp
         run: |
