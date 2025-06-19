@@ -16,10 +16,10 @@ The original beszel-agent doesn’t support GPU monitoring out of the box. This 
 **Docker Hub:** [`daltonsbaker/beszel-agent-nvidia`](https://hub.docker.com/r/daltonsbaker/beszel-agent-nvidia)
 
 ### Tags:
-| Tag       | Description                             |
-|-----------|-----------------------------------------|
-| `latest`  | Latest upstream tag, patched for NVIDIA |
-| `vX.Y.Z`  | Matches upstream tag version            |
+| Tag         | Description                             |
+|-------------|-----------------------------------------|
+| `latest`    | Latest upstream tag, patched for NVIDIA |
+| `yyyy-mm-dd`| Added any time a new image is created   |
 
 
 ## 🚀 Usage
