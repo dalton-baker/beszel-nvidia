@@ -12,21 +12,32 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Fetch latest upstream tag
-        id: get_tag
+      - name: Fetch latest update timestamp from Docker Hub
+        id: get_info
         run: |
-          curl -s https://hub.docker.com/v2/repositories/henrygd/beszel-agent/tags?page_size=1&page=1\&ordering=last_updated \
-          | jq -r '.results[0].name' > .latest_upstream_tag
-          echo "tag=$(cat .latest_upstream_tag)" >> $GITHUB_OUTPUT
+          meta=$(curl -s https://hub.docker.com/v2/repositories/henrygd/beszel-agent/tags/latest)
+          tag_name=$(echo "$meta" | jq -r '.name')
+          last_updated=$(echo "$meta" | jq -r '.last_updated')
+      
+          if [ -z "$last_updated" ] || [ "$last_updated" == "null" ]; then
+            echo "ERROR: Upstream metadata fetch failed!" >&2
+            exit 1
+          fi
+      
+          echo "tag=$tag_name" >> $GITHUB_OUTPUT
+          echo "last_updated=$last_updated" >> $GITHUB_OUTPUT
 
-      - name: Read previously seen tag
-        id: read_tag
+      - name: Check for upstream update
+        id: check
         run: |
-          echo "prev_tag=$(cat .last_seen_tag 2>/dev/null || echo none)" >> $GITHUB_OUTPUT
-
-      - name: Skip build if unchanged
-        if: steps.get_tag.outputs.tag == steps.read_tag.outputs.prev_tag
-        run: echo "No new tag detected. Skipping build." && exit 0
+          last_seen=$(cat .last_seen_update 2>/dev/null || echo none)
+          echo "Previous: $last_seen"
+          echo "Current: ${{ steps.get_info.outputs.last_updated }}"
+      
+          if [ "$last_seen" == "${{ steps.get_info.outputs.last_updated }}" ]; then
+            echo "No new update — skipping build."
+            exit 0
+          fi
 
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
@@ -34,19 +45,27 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
+      - name: Generate timestamp tag
+        id: timestamp
+        run: |
+          tag=$(date -u +'%Y-%m-%d')
+          echo "tag=$tag" >> $GITHUB_OUTPUT
+
       - name: Build and push GPU-patched image
         uses: docker/build-push-action@v5
         with:
           context: .
           file: Dockerfile
           push: true
-          tags: daltonsbaker/beszel-agent-nvidia:${{ steps.get_tag.outputs.tag }},daltonsbaker/beszel-agent-nvidia:latest
+          tags: |
+            daltonsbaker/beszel-agent-nvidia:latest
+            daltonsbaker/beszel-agent-nvidia:${{ steps.timestamp.outputs.tag }}
 
-      - name: Save new tag
+      - name: Save update timestamp
         run: |
-          echo "${{ steps.get_tag.outputs.tag }}" > .last_seen_tag
+          echo "${{ steps.get_info.outputs.last_updated }}" > .last_seen_update
           git config user.name github-actions
           git config user.email github-actions@github.com
-          git add .last_seen_tag
-          git commit -m "Update last seen tag to ${{ steps.get_tag.outputs.tag }}"
+          git add .last_seen_update
+          git commit -m "Track last updated: ${{ steps.get_info.outputs.last_updated }}"
           git push
