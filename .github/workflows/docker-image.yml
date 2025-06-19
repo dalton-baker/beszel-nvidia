@@ -1,0 +1,52 @@
+name: Rebuild on New Upstream Tag
+
+on:
+  schedule:
+    - cron: '0 5 * * *'  # every 15 minutes
+  workflow_dispatch:
+
+jobs:
+  rebuild-if-updated:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Fetch latest upstream tag
+        id: get_tag
+        run: |
+          curl -s https://hub.docker.com/v2/repositories/henrygd/beszel-agent/tags?page_size=1&page=1\&ordering=last_updated \
+          | jq -r '.results[0].name' > .latest_upstream_tag
+          echo "tag=$(cat .latest_upstream_tag)" >> $GITHUB_OUTPUT
+
+      - name: Read previously seen tag
+        id: read_tag
+        run: |
+          echo "prev_tag=$(cat .last_seen_tag 2>/dev/null || echo none)" >> $GITHUB_OUTPUT
+
+      - name: Skip build if unchanged
+        if: steps.get_tag.outputs.tag == steps.read_tag.outputs.prev_tag
+        run: echo "No new tag detected. Skipping build." && exit 0
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push GPU-patched image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: daltonsbaker/beszel-agent-nvidia:${{ steps.get_tag.outputs.tag }},daltonsbaker/beszel-agent-nvidia:latest
+
+      - name: Save new tag
+        run: |
+          echo "${{ steps.get_tag.outputs.tag }}" > .last_seen_tag
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add .last_seen_tag
+          git commit -m "Update last seen tag to ${{ steps.get_tag.outputs.tag }}"
+          git push
